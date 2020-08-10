@@ -33,13 +33,18 @@ import (
 const (
 	// defaultCertGracePeriodRatio is the default length of certificate rotation grace period,
 	// configured as the ratio of the certificate TTL.
+	// defaultCertGracePeriodRatio是证书轮换宽限期的默认长度
+	// 以证书ttl的比例方式配置
 	defaultCertGracePeriodRatio = 0.5
 
 	// defaultMinCertGracePeriod is the default minimum grace period for workload cert rotation.
+	// defaultMinCertGracePeriod是负载的证书轮换周期的最小时间周期
 	defaultMinCertGracePeriod = 10 * time.Minute
 
 	// Default CA certificate path
 	// Currently, custom CA path is not supported; no API to get custom CA cert yet.
+	// 默认CA证书路径
+	// 当前，暂不支持自定义证书路径；也暂不提供API去获取自定义证书
 	defaultCACertPath = "./var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
 )
 
@@ -55,10 +60,12 @@ var (
 )
 
 // CertController can create certificates signed by K8S server.
+// CertController可以创建由k8s服务器签名的证书
 func (s *Server) initCertController(args *PilotArgs) error {
 	var err error
 	var secretNames, dnsNames, namespaces []string
 
+	// 获取服务网格内关于k8s域名证书配置定义，没有配置定义，则跳过k8s dns证书配置初始化控制器
 	meshConfig := s.environment.Mesh()
 	if meshConfig.GetCertificates() == nil || len(meshConfig.GetCertificates()) == 0 {
 		// TODO: if the provider is set to Citadel, use that instead of k8s so the API is still preserved.
@@ -82,15 +89,19 @@ func (s *Server) initCertController(args *PilotArgs) error {
 
 	// Provision and manage the certificates for non-Pilot services.
 	// If services are empty, the certificate controller will do nothing.
+	// WebhookController管理service account的密钥，密钥内包含istio的key和证书
+	// 初始化证书控制器
 	s.certController, err = chiron.NewWebhookController(defaultCertGracePeriodRatio, defaultMinCertGracePeriod,
 		k8sClient.CoreV1(), k8sClient.AdmissionregistrationV1beta1(), k8sClient.CertificatesV1beta1(),
 		defaultCACertPath, secretNames, dnsNames, namespaces)
 	if err != nil {
 		return fmt.Errorf("failed to create certificate controller: %v", err)
 	}
+	// 加入启动hook方法
 	s.addStartFunc(func(stop <-chan struct{}) error {
 		go func() {
 			// Run Chiron to manage the lifecycles of certificates
+			// 管理证书的生命周期，直到收到stop信号通知
 			s.certController.Run(stop)
 		}()
 
@@ -110,6 +121,13 @@ func (s *Server) initCertController(args *PilotArgs) error {
 //
 // TODO: If the discovery address in mesh.yaml is set to port 15012 (XDS-with-DNS-certs) and the name
 // matches the k8s namespace, failure to start DNS server is a fatal error.
+//
+// initDNSCerts用来创建证书给Istiod GRPC服务器和webhooks使用
+// 如果证书创建失败 - 比如k8s不支持 - 返回错误信息
+// 将会使用mesh.yaml中的DIscoveryAddress去查找控制平面的默认期望地址
+// 可以使用环境变量覆盖这个默认值
+//
+// 通过features.IstiodService的环境变量控制，这个变量定义了在DNS证书中使用的服务名称，如果为空，则禁用这个特性
 func (s *Server) initDNSCerts(hostname, namespace string) error {
 	parts := strings.Split(hostname, ".")
 	if len(parts) < 2 {

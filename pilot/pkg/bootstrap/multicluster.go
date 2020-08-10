@@ -22,6 +22,7 @@ import (
 
 // initClusterRegistries starts the secret controller to watch for remote
 // clusters and initialize the multicluster structures.
+// 启动密钥控制器并且开始监听远程集群和初始化多集群结构
 func (s *Server) initClusterRegistries(args *PilotArgs) (err error) {
 	if hasKubeRegistry(args.Service.Registries) {
 		mc, err := controller.NewMulticluster(s.kubeClient,

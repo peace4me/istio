@@ -38,6 +38,7 @@ type MeshArgs struct {
 // ConfigArgs provide configuration options for the configuration controller. If FileDir is set, that directory will
 // be monitored for CRD yaml files and will update the controller as those files change (This is used for testing
 // purposes). Otherwise, a CRD client is created based on the configuration.
+// 配置控制器配置
 type ConfigArgs struct {
 	ControllerOptions          kubecontroller.Options
 	ClusterRegistriesNamespace string
@@ -59,12 +60,14 @@ type ConsulArgs struct {
 }
 
 // ServiceArgs provides the composite configuration for all service registries in the system.
+// 服务注册器通用配置
 type ServiceArgs struct {
 	Registries []string
 	Consul     ConsulArgs
 }
 
 // PilotArgs provides all of the configuration parameters for the Pilot discovery service.
+// Pilot发现服务所有配置
 type PilotArgs struct {
 	DiscoveryOptions   DiscoveryServiceOptions
 	InjectionOptions   InjectionOptions
@@ -87,6 +90,7 @@ type PilotArgs struct {
 
 // DiscoveryServiceOptions contains options for create a new discovery
 // service instance.
+// 发现服务实例配置选项
 type DiscoveryServiceOptions struct {
 	// The listening address for HTTP (debug). If the port in the address is empty or "0" (as in "127.0.0.1:" or "[::1]:0")
 	// a port number is automatically chosen.
@@ -109,6 +113,7 @@ type DiscoveryServiceOptions struct {
 
 type InjectionOptions struct {
 	// Directory of injection related config files.
+	// 配置文件注入目录
 	InjectionDirectory string
 }
 

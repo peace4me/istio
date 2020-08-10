@@ -65,6 +65,7 @@ const (
 )
 
 // initConfigController creates the config controller in the pilotConfig.
+// initConfigController创建在pilotConfig定义的配置控制器
 func (s *Server) initConfigController(args *PilotArgs) error {
 	meshConfig := s.environment.Mesh()
 	if len(meshConfig.ConfigSources) > 0 {

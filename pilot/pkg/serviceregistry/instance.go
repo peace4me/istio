@@ -20,6 +20,9 @@ import (
 
 // Instance of a service registry. A single service registry combines the capabilities of service discovery
 // and the controller for managing asynchronous events.
+// 服务注册器实例。
+// - 管理异步事件
+// - 服务发现
 type Instance interface {
 	model.Controller
 	model.ServiceDiscovery

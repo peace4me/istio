@@ -52,6 +52,11 @@ func (l *LeaderElection) Run(stop <-chan struct{}) {
 			panic("leaderelection creation failed: " + err.Error())
 		}
 		l.cycle.Inc()
+		// Context包定义了Context类型，Context类型携带着deadline生命周期，和取消信号，并且可以携带用户自定义的参数值。
+		// 通常用Context来控制上下文，Context通过参数一层层传递，或者传递context的派生，一旦Context被取消，
+		// 所有由该Context派生的Context也会取消。WithCancel，WithDeadline，和WithTimeout函数可以从一个Context
+		// 中派生另外一个Context和一个cancel函数。调用cancel函数可以取消由context派生出来的Context。
+		// cancel函数会释放context拥有的资源，所以当context不用时要尽快调用cancel。
 		ctx, cancel := context.WithCancel(context.Background())
 		go func() {
 			<-stop

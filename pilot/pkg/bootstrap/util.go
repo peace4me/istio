@@ -29,6 +29,10 @@ func hasKubeRegistry(registries []string) bool {
 	return false
 }
 
+// Ledger的三个特性
+// 1.map的任一状态都有对应的唯一hash
+// 2.map的先前状态会被保留一阵时间
+// 3.通过上一个状态的hash值，我们可以找到map的上一个状态，如果这个map还在的话
 func buildLedger(ca ConfigArgs) ledger.Ledger {
 	var result ledger.Ledger
 	if ca.DistributionTrackingEnabled {

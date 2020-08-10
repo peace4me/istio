@@ -46,6 +46,11 @@ const (
 
 // Was not used in Pilot for 1.3/1.4 (injector was standalone).
 // In 1.5 - used as part of istiod, if the inject template exists.
+
+// 初始化Sidecar注入器配置
+// 配置hook
+// 加载证书
+// 初始化完毕启动hook
 func (s *Server) initSidecarInjector(args *PilotArgs) error {
 	// Injector should run along, even if not used - but only if the injection template is mounted.
 	// ./var/lib/istio/inject - enabled by mounting a template in the config.
@@ -121,12 +126,14 @@ func (s *Server) patchCertLoop(client kubernetes.Interface, stopCh <-chan struct
 
 	shouldPatch := make(chan struct{})
 
+	// listwatch的实现方式
 	watchlist := cache.NewListWatchFromClient(
 		client.AdmissionregistrationV1beta1().RESTClient(),
 		"mutatingwebhookconfigurations",
 		"",
 		fields.ParseSelectorOrDie(fmt.Sprintf("metadata.name=%s", injectionWebhookConfigName.Get())))
 
+	// listwatch资源的监听
 	_, controller := cache.NewInformer(
 		watchlist,
 		&v1beta1.MutatingWebhookConfiguration{},
@@ -138,6 +145,7 @@ func (s *Server) patchCertLoop(client kubernetes.Interface, stopCh <-chan struct
 
 				if oldConfig.ResourceVersion != newConfig.ResourceVersion {
 					for i, w := range newConfig.Webhooks {
+						// webhook名称一致且内容发生了变化, bytes.Equal字节级别比较
 						if w.Name == webhookName && !bytes.Equal(newConfig.Webhooks[i].ClientConfig.CABundle, caCertPem) {
 							log.Infof("Detected a change in CABundle, patching MutatingWebhookConfiguration again")
 							shouldPatch <- struct{}{}
@@ -150,9 +158,13 @@ func (s *Server) patchCertLoop(client kubernetes.Interface, stopCh <-chan struct
 	)
 	go controller.Run(stopCh)
 
+	// 重试机制
+	// 主动发起Patch操作，前置条件许可
+	// 开启retry参数或超时重试
 	go func() {
 		var delayedRetryC <-chan time.Time
 		if retry {
+			// 等待delayRetryTime后向返回的通道发送当前时间戳，可用来做定时，超时检测
 			delayedRetryC = time.After(delayedRetryTime)
 		}
 
@@ -171,6 +183,7 @@ func (s *Server) patchCertLoop(client kubernetes.Interface, stopCh <-chan struct
 						delayedRetryC = time.After(delayedRetryTime)
 					}
 				} else {
+					// 加快释放通道
 					delayedRetryC = nil
 				}
 			}
@@ -180,6 +193,7 @@ func (s *Server) patchCertLoop(client kubernetes.Interface, stopCh <-chan struct
 	return nil
 }
 
+// 将webhook和证书接入到准入控制器当中
 func doPatch(cs kubernetes.Interface, webhookConfigName, webhookName string, caCertPem []byte) (retry bool) {
 	client := cs.AdmissionregistrationV1beta1().MutatingWebhookConfigurations()
 	if err := util.PatchMutatingWebhookConfig(client, webhookConfigName, webhookName, caCertPem); err != nil {

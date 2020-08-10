@@ -72,10 +72,12 @@ import (
 
 var (
 	// FilepathWalkInterval dictates how often the file system is walked for config
+	// 文件系统遍历时间间隔
 	FilepathWalkInterval = 100 * time.Millisecond
 
 	// PilotCertDir is the default location for mTLS certificates used by pilot
 	// Visible for tests - at runtime can be set by PILOT_CERT_DIR environment variable.
+	// 测试用默认证书存访地址，可通过PILOT_CERT_DIR环境变量覆盖
 	PilotCertDir = "/etc/certs/"
 
 	// DefaultPlugins is the default list of plugins to enable, when no plugin(s)

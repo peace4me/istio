@@ -68,7 +68,7 @@ func startMonitor(addr string, mux *http.ServeMux) (*monitor, error) {
 		return nil, fmt.Errorf("unable to listen on socket: %v", err)
 	}
 
-	// NOTE: this is a temporary solution to provide bare-bones debug functionality
+	// NOTE: this is a temporary solution to provide bare-bones(单纯; 干骨架; 极简单的;) debug functionality
 	// for pilot. a full design / implementation of self-monitoring and reporting
 	// is coming. that design will include proper coverage of statusz/healthz type
 	// functionality, in addition to how pilot reports its own metrics.

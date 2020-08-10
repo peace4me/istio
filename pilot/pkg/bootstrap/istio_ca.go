@@ -134,6 +134,8 @@ type CAOptions struct {
 // in RunCA(). The reason for moving this logic from RunCA into EnableCA() is
 // to have a central consistent endpoint to get whether CA functionality is
 // enabled in istiod. EnableCA() is called in multiple places.
+
+// CA证书启用一致性控制
 func (s *Server) EnableCA() bool {
 	if s.kubeClient == nil {
 		// No k8s - no self-signed certs.

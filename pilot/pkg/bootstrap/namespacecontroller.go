@@ -36,8 +36,10 @@ const (
 	// Every namespaceResyncPeriod, namespaceUpdated() will be invoked
 	// for every namespace. This value must be configured so Citadel
 	// can update its CA certificate in a ConfigMap in every namespace.
+	// Citadel下发证书并更新
 	namespaceResyncPeriod = time.Second * 30
 	// The name of the ConfigMap in each namespace storing the root cert of non-Kube CA.
+	// 包含非kube的根证书的Configmap名称
 	CACertNamespaceConfigMap = "istio-ca-root-cert"
 )
 
@@ -46,6 +48,7 @@ var (
 )
 
 // NamespaceController manages reconciles a configmap in each namespace with a desired set of data.
+// NamespaceController负责管理configmap在命名空间内的调度
 type NamespaceController struct {
 	// getData is the function to fetch the data we will insert into the config map
 	getData func() map[string]string
@@ -67,6 +70,7 @@ func NewNamespaceController(data func() map[string]string, kubeClient kubernetes
 		queue:   queue.NewQueue(time.Second),
 	}
 
+	// 尽可能使用的工厂模式去获取一个共享的informer而不是去获取一个单独的informer。这样可以帮助减少内存占用以及和服务端的连接数
 	configmapInformer := informer.NewFilteredConfigMapInformer(kubeClient, metav1.NamespaceAll, 0,
 		cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
 		func(options *metav1.ListOptions) {
@@ -133,6 +137,7 @@ func (nc *NamespaceController) Run(stopCh <-chan struct{}) {
 // insertDataForNamespace will add data into the configmap for the specified namespace
 // If the configmap is not found, it will be created.
 // If you know the current contents of the configmap, using UpdateDataInConfigMap is more efficient.
+// 在已知configmap状态的情况下，使用UpdateDataInConfigMap效率更高
 func (nc *NamespaceController) insertDataForNamespace(ns string) error {
 	meta := metav1.ObjectMeta{
 		Name:      CACertNamespaceConfigMap,
@@ -144,6 +149,7 @@ func (nc *NamespaceController) insertDataForNamespace(ns string) error {
 
 // On namespace change, update the config map.
 // If terminating, this will be skipped
+// 命名空间发生变化，则更新configmap。如果configmap处于终止状态，则跳过
 func (nc *NamespaceController) namespaceChange(obj interface{}) error {
 	ns, ok := obj.(*v1.Namespace)
 

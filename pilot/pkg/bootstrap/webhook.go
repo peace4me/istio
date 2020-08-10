@@ -30,6 +30,7 @@ import (
 
 const (
 	// debounce file watcher events to minimize noise in logs
+	// 防止文件观察事件的抖动以最小化日志中的噪音
 	watchDebounceDelay = 100 * time.Millisecond
 )
 
