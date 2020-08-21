@@ -156,14 +156,19 @@ type Controller struct {
 	endpoints kubeEndpointsController
 
 	// TODO we can disable this when we only have EndpointSlice enabled
-	nodes           cache.SharedIndexInformer
-	pods            *PodCache
-	metrics         model.Metrics
+	nodes   cache.SharedIndexInformer
+	pods    *PodCache
+	metrics model.Metrics
+	// 服务网格网络变化观察者
 	networksWatcher mesh.NetworksWatcher
-	xdsUpdater      model.XDSUpdater
-	domainSuffix    string
-	clusterID       string
+	// 用于xDS模型更新和增量推送
+	// 增量推送的意义是减少复杂情况下(多注册器，多分组)的全量推送复杂度
+	xdsUpdater   model.XDSUpdater
+	domainSuffix string
+	clusterID    string
 
+	// Service为Istio里的服务，域名形式，通常可以有一个虚拟IP对应
+	// Event表示一个注册器更新事件
 	serviceHandlers []func(*model.Service, model.Event)
 
 	// This is only used for test
@@ -201,11 +206,14 @@ func NewController(client kubernetes.Interface, options Options) *Controller {
 		metrics:                    options.Metrics,
 	}
 
+	// SharedInformer完成client到获取Object的权威状态的链路，达到缓存内Object状态的最终一致性，
+	// ShareInformerFactory具备所有Object的SharedInformer的生产能力
 	sharedInformers := informers.NewSharedInformerFactoryWithOptions(client, options.ResyncPeriod, informers.WithNamespace(options.WatchedNamespace))
 
 	c.services = sharedInformers.Core().V1().Services().Informer()
 	registerHandlers(c.services, c.queue, "Services", c.onServiceEvent)
 
+	// endpointMode决定了使用什么资源去获取端点信息
 	switch options.EndpointMode {
 	case EndpointsOnly:
 		c.endpoints = newEndpointsController(c, sharedInformers)
@@ -231,6 +239,7 @@ func (c *Controller) Cluster() string {
 	return c.clusterID
 }
 
+// 检查各SharedInformer是否都已完成缓存同步
 func (c *Controller) checkReadyForEvents() error {
 	if !c.HasSynced() {
 		return errors.New("waiting till full synchronization")
@@ -245,6 +254,8 @@ func (c *Controller) onServiceEvent(curr interface{}, event model.Event) error {
 
 	svc, ok := curr.(*v1.Service)
 	if !ok {
+		// 对象已被删除，但有可能删除事件丢失，从而将对象以DeletedFinalStateUnknown状态纪录下来并放入到DeltaFIFO
+		// 以被后续操作使用
 		tombstone, ok := curr.(cache.DeletedFinalStateUnknown)
 		if !ok {
 			log.Errorf("Couldn't get object from tombstone %#v", curr)
@@ -263,6 +274,7 @@ func (c *Controller) onServiceEvent(curr interface{}, event model.Event) error {
 	switch event {
 	case model.EventDelete:
 		c.Lock()
+		// 内存中删除
 		delete(c.servicesMap, svcConv.Hostname)
 		delete(c.externalNameSvcInstanceMap, svcConv.Hostname)
 		c.Unlock()
@@ -279,6 +291,7 @@ func (c *Controller) onServiceEvent(curr interface{}, event model.Event) error {
 			c.externalNameSvcInstanceMap[svcConv.Hostname] = instances
 		}
 		c.Unlock()
+		// 更新xds模型并且发布事件
 		c.xdsUpdater.SvcUpdate(c.clusterID, svc.Name, svc.Namespace, event)
 	}
 
@@ -294,6 +307,7 @@ func (c *Controller) onNodeEvent(_ interface{}, _ model.Event) error {
 	return c.checkReadyForEvents()
 }
 
+// 注册事件句柄
 func registerHandlers(informer cache.SharedIndexInformer, q queue.Instance, otype string,
 	handler func(interface{}, model.Event) error) {
 
@@ -327,6 +341,7 @@ func registerHandlers(informer cache.SharedIndexInformer, q queue.Instance, otyp
 
 // compareEndpoints returns true if the two endpoints are the same in aspects Pilot cares about
 // This currently means only looking at "Ready" endpoints
+// 端点比较，只比较port和address
 func compareEndpoints(a, b *v1.Endpoints) bool {
 	if len(a.Subsets) != len(b.Subsets) {
 		return false
@@ -509,6 +524,7 @@ func (c *Controller) WorkloadHealthCheckInfo(addr string) model.ProbeList {
 }
 
 // InstancesByPort implements a service catalog operation
+// 先查找外部服务实例，若不存在查找内部服务实例
 func (c *Controller) InstancesByPort(svc *model.Service, reqSvcPort int,
 	labelsList labels.Collection) ([]*model.ServiceInstance, error) {
 
@@ -530,6 +546,7 @@ func (c *Controller) InstancesByPort(svc *model.Service, reqSvcPort int,
 }
 
 // GetProxyServiceInstances returns service instances co-located with a given proxy
+// 返回代理对应的服务实例
 func (c *Controller) GetProxyServiceInstances(proxy *model.Proxy) ([]*model.ServiceInstance, error) {
 	out := make([]*model.ServiceInstance, 0)
 	if len(proxy.IPAddresses) > 0 {
@@ -542,6 +559,8 @@ func (c *Controller) GetProxyServiceInstances(proxy *model.Proxy) ([]*model.Serv
 			// which can happen when multi clusters using same pod cidr.
 			// As we have proxy Network meta, compare it with the network which endpoint belongs to,
 			// if they are not same, ignore the pod, because the pod is in another cluster.
+			// 判断是不是在同一个集群内
+			// 如果不是同一个集群，则直接返回
 			if proxy.Metadata.Network != c.endpointNetwork(proxyIP) {
 				return out, nil
 			}
@@ -582,6 +601,7 @@ func (c *Controller) GetProxyServiceInstances(proxy *model.Proxy) ([]*model.Serv
 // getProxyServiceInstancesFromMetadata retrieves ServiceInstances using proxy Metadata rather than
 // from the Pod. This allows retrieving Instances immediately, regardless of delays in Kubernetes.
 // If the proxy doesn't have enough metadata, an error is returned
+// 从代理元数据中获取代理服务实例信息，而非从实际的pod中获取
 func (c *Controller) getProxyServiceInstancesFromMetadata(proxy *model.Proxy) ([]*model.ServiceInstance, error) {
 	if len(proxy.Metadata.Labels) == 0 {
 		return nil, fmt.Errorf("no workload labels found")
@@ -634,6 +654,8 @@ func (c *Controller) getProxyServiceInstancesFromMetadata(proxy *model.Proxy) ([
 			// Dedupe the target ports here - Service might have configured multiple ports to the same target port,
 			// we will have to create only one ingress listener per port and protocol so that we do not endup
 			// complaining about listener conflicts.
+			// 去重操作
+			// 减少指向同一个targetPort的多个配置端口
 			targetPort := model.Port{
 				Port:     portNum,
 				Protocol: svcPort.Protocol,
@@ -671,6 +693,7 @@ func (c *Controller) getProxyServiceInstancesFromMetadata(proxy *model.Proxy) ([
 }
 
 // findPortFromMetadata resolves the TargetPort of a Service Port, by reading the Pod spec.
+// 从Pod定义里获取targetPort的服务端口
 func findPortFromMetadata(svcPort v1.ServicePort, podPorts []model.PodPort) (int, error) {
 	target := svcPort.TargetPort
 
@@ -690,6 +713,7 @@ func findPortFromMetadata(svcPort v1.ServicePort, podPorts []model.PodPort) (int
 	return 0, fmt.Errorf("no matching port found for %+v", svcPort)
 }
 
+// 从pod和代理信息中获取服务实例
 func (c *Controller) getProxyServiceInstancesByPod(pod *v1.Pod, service *v1.Service, proxy *model.Proxy) []*model.ServiceInstance {
 	out := make([]*model.ServiceInstance, 0)
 
@@ -756,6 +780,9 @@ func (c *Controller) GetProxyWorkloadLabels(proxy *model.Proxy) (labels.Collecti
 // hostname. Each service account is encoded according to the SPIFFE VSID spec.
 // For example, a service account named "bar" in namespace "foo" is encoded as
 // "spiffe://cluster.local/ns/foo/sa/bar".
+// SPIFFE(Secure Production Identity Framework for Everyone
+// SPIFFE提供异构系统之间软件系统的认证
+// port,svc -> serviceInstance -> endpoint -> serviceAccount
 func (c *Controller) GetIstioServiceAccounts(svc *model.Service, ports []int) []string {
 	saSet := make(map[string]bool)
 
@@ -925,6 +952,9 @@ func (c *Controller) endpointNetwork(endpointIP string) string {
 // targetPort is a number, use that.  If the targetPort is a string, look that
 // string up in all named ports in all containers in the target pod.  If no
 // match is found, fail.
+// 查找port逻辑
+// 1.如果targetPort是数值，则直接返回
+// 2.如果targetPort是名称，则查找pod下所有容器的对应名称的端口数值
 func FindPort(pod *v1.Pod, svcPort *v1.ServicePort) (int, error) {
 	portName := svcPort.TargetPort
 	switch portName.Type {

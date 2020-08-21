@@ -46,6 +46,7 @@ type LeaderElection struct {
 // Run will start leader election, calling all runFns when we become the leader.
 func (l *LeaderElection) Run(stop <-chan struct{}) {
 	for {
+		// 创建LeaderElector
 		le, err := l.create()
 		if err != nil {
 			// This should never happen; errors are only from invalid input and the input is not user modifiable
@@ -62,6 +63,9 @@ func (l *LeaderElection) Run(stop <-chan struct{}) {
 			<-stop
 			cancel()
 		}()
+		// 循环获取锁
+		// 成功获取锁，执行startLeading逻辑
+		// 未成功获取锁，直接退出
 		le.Run(ctx)
 		select {
 		case <-stop:
@@ -76,6 +80,7 @@ func (l *LeaderElection) Run(stop <-chan struct{}) {
 	}
 }
 
+// 创建ConfigMap锁， 有对应的默认callback
 func (l *LeaderElection) create() (*leaderelection.LeaderElector, error) {
 	callbacks := leaderelection.LeaderCallbacks{
 		OnStartedLeading: func(ctx context.Context) {
@@ -106,12 +111,15 @@ func (l *LeaderElection) create() (*leaderelection.LeaderElector, error) {
 		// usages (rather than avoiding duplication of work), this may need to be re-evaluated.
 		// TODO (therealmitchconnors) move background analysis to leader instance once this bug is fixed
 		// TODO this should be true once https://github.com/kubernetes/kubernetes/issues/87800 is fixed
+		// 当Pilot退出时，租约将会被解除。这更像是引向当很多实例都被认为是leader的一种情形。同样的，如果它被用作是关键任务使用(而非避免任务重复执行),
+		// 这将需要重新评估
 		ReleaseOnCancel: false,
 	})
 }
 
 // AddRunFunction registers a function to run when we are the leader. These will be run asynchronously.
 // To avoid running when not a leader, functions should respect the stop channel.
+// 当非leader时，任务不能执行执行，因此函数需尊重stop通道
 func (l *LeaderElection) AddRunFunction(f func(stop <-chan struct{})) {
 	l.runFns = append(l.runFns, f)
 }

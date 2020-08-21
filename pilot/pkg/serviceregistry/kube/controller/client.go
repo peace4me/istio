@@ -24,6 +24,8 @@ import (
 )
 
 // CreateInterface is a helper function to create Kubernetes interface from kubeconfig file
+// 通过kubeconfig创建kubernetes interface
+// kubernetes interface负责和kubernetes cluster交互
 func CreateInterface(kubeconfig string) (kubernetes.Interface, error) {
 	if len(kubeconfig) == 0 {
 		// Avoid the confusing "Things might not work" message
