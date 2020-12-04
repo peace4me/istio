@@ -185,6 +185,7 @@ debug and diagnose their Istio mesh.
 	rootCmd.AddCommand(optionsCommand(rootCmd))
 
 	// BFS apply the flag error function to all subcommands
+	// BFS的实现，给所有命令添加flagErrorFunc
 	seenCommands := make(map[*cobra.Command]bool)
 	var commandStack []*cobra.Command
 
@@ -195,6 +196,7 @@ debug and diagnose their Istio mesh.
 		curCmd := commandStack[n]
 		commandStack = commandStack[:n]
 		seenCommands[curCmd] = true
+		// 添加当前命令的所有子命令到stack当中，排除已添加error的命令
 		for _, command := range curCmd.Commands() {
 			if !seenCommands[command] {
 				commandStack = append(commandStack, command)
@@ -213,7 +215,7 @@ func hideInheritedFlags(orig *cobra.Command, hidden ...string) {
 		for _, hidden := range hidden {
 			_ = cmd.Flags().MarkHidden(hidden) // nolint: errcheck
 		}
-
+		// 返回父helpFunc或者默认helpFunc
 		orig.SetHelpFunc(nil)
 		orig.HelpFunc()(cmd, args)
 	})

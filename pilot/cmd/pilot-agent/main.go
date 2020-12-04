@@ -210,6 +210,7 @@ var (
 			} else {
 				log.Info("Using existing certs")
 			}
+			// todo ①sa和spiffe都是证书签发，各自的作用和区别是什么？？
 			sa := istio_agent.NewSDSAgent(proxyConfig.DiscoveryAddress, proxyConfig.ControlPlaneAuthPolicy == meshconfig.AuthenticationPolicy_MUTUAL_TLS,
 				pilotCertProvider, jwtPath, outputKeyCertToDir, clusterIDVar.Get())
 

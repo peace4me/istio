@@ -237,8 +237,10 @@ istioctl kube-inject -f samples/bookinfo/platform/kube/bookinfo.yaml \
 
 			var writer io.Writer
 			if outFilename == "" {
+				// 重定向到标准输出
 				writer = c.OutOrStdout()
 			} else {
+				// 重定向文件
 				var out *os.File
 				if out, err = os.Create(outFilename); err != nil {
 					return err

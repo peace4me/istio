@@ -135,7 +135,7 @@ func NewServer(config Config) (*Server, error) {
 		}
 	}
 
-	// Enable prometheus server if its configured and a sidecar
+	// Enable prometheus server if its configured as a sidecar
 	// Because port 15020 is exposed in the gateway Services, we cannot safely serve this endpoint
 	// If we need to do this in the future, we should use envoy to do routing or have another port to make this internal
 	// only. For now, its not needed for gateway, as we can just get Envoy stats directly, but if we
@@ -243,7 +243,7 @@ type PrometheusScrapeConfiguration struct {
 }
 
 // handleStats handles prometheus stats scraping. This will scrape envoy metrics, and, if configured,
-// the application metrics and merge them together.
+// the application metrics and merge them together（消息聚合).
 // The merge here is a simple string concatenation. This works for almost all cases, assuming the application
 // is not exposing the same metrics as Envoy.
 // TODO(https://github.com/istio/istio/issues/22825) expose istio-agent stats here as well
@@ -272,6 +272,7 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// 从from的header注入keys(from headers有对应信息)到into的header里
 func applyHeaders(into http.Header, from http.Header, keys ...string) {
 	for _, key := range keys {
 		val := from.Get(key)
@@ -292,7 +293,7 @@ func getHeaderTimeout(timeout string) (time.Duration, error) {
 }
 
 // scrape will send a request to the provided url to scrape metrics from
-// This will attempt to mimic some of Prometheus functionality by passing some of the headers through
+// This will attempt to mimic(模仿) some of Prometheus functionality by passing some of the headers through
 // such as timeout and user agent
 func (s *Server) scrape(url string, header http.Header) ([]byte, error) {
 	ctx := context.Background()
@@ -332,6 +333,10 @@ func (s *Server) scrape(url string, header http.Header) ([]byte, error) {
 	return metrics, nil
 }
 
+// 只处理本机发出的终止信号(避免远程干扰的安全策略？)
+// 只接收GET请求
+// 响应信息头信息写入200，消息体返回OK
+// 发出终止信号到调用进程
 func (s *Server) handleQuit(w http.ResponseWriter, r *http.Request) {
 	if !isRequestFromLocalhost(r) {
 		http.Error(w, "Only requests from localhost are allowed", http.StatusForbidden)
@@ -347,6 +352,10 @@ func (s *Server) handleQuit(w http.ResponseWriter, r *http.Request) {
 	notifyExit()
 }
 
+// 检查各注册应用的健康状态
+// 通过server初始化时候注入的app关联的httpclient发起健康检查请求
+// 通过httpClient的复用，避免重复创建httpClient，既节省了资源也提高了访问的效率
+// 返回结果只返回响应头信息，响应内容被丢弃掉
 func (s *Server) handleAppProbe(w http.ResponseWriter, req *http.Request) {
 	// Validate the request first.
 	path := req.URL.Path
@@ -367,6 +376,7 @@ func (s *Server) handleAppProbe(w http.ResponseWriter, req *http.Request) {
 	} else {
 		url = fmt.Sprintf("http://localhost:%v%s", prober.HTTPGet.Port.IntValue(), prober.HTTPGet.Path)
 	}
+	// ①这里是Get请求，且最终body会被丢弃掉，为什么不直接使用head方法？
 	appReq, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		log.Errorf("Failed to create request to probe app %v, original url %v", err, path)
@@ -409,6 +419,7 @@ func (s *Server) handleAppProbe(w http.ResponseWriter, req *http.Request) {
 }
 
 // notifyExit sends SIGTERM to itself
+// 向调用进程发送中断信号
 func notifyExit() {
 	p, err := os.FindProcess(os.Getpid())
 	if err != nil {

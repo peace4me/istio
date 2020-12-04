@@ -85,6 +85,7 @@ func watchFileEvents(ctx context.Context, wch <-chan *fsnotify.FileEvent, minDel
 		select {
 		case ev := <-wch:
 			log.Infof("watchFileEvents: %s", ev.String())
+			// 确保在minDelay单位内，notifyFn最多只会执行一次
 			if timer != nil {
 				continue
 			}
@@ -128,6 +129,9 @@ func watchCerts(ctx context.Context, certs []string, watchFileEventsFn watchFile
 	// This happens because secrets are symbolic links pointing to files
 	// which are updated by kubernetes. On updating secrets, kubernetes
 	// deletes the existing file, which sends a DELETE file event and breaks the watch
+	// 这里描述了为什么监控文件夹而非文件
+	// 由于secrets是的certs文件的符号链接，当kubernetes更新certs文件时，实际上是删除了原有文件，从而发送了一个
+	// 文件删除事件，从而会中断watch(已删除文件不可能再被watch)
 	certDirs := make(map[string]bool)
 	for _, c := range certs {
 		certDirs[filepath.Dir(c)] = true

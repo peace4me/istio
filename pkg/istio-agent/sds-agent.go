@@ -67,6 +67,7 @@ var (
 	trustDomainEnv = env.RegisterStringVar(trustDomain, "", "").Get()
 	secretTTLEnv   = env.RegisterDurationVar(secretTTL, 24*time.Hour,
 		"The cert lifetime requested by istio agent").Get()
+	// rotation(轮换)
 	secretRotationGracePeriodRatioEnv = env.RegisterFloatVar(secretRotationGracePeriodRatio, 0.5,
 		"The grace period ratio for the cert rotation, by default 0.5.").Get()
 	secretRotationIntervalEnv = env.RegisterDurationVar(secretRotationInterval, 5*time.Minute,
@@ -344,7 +345,13 @@ func ingressSdsExists() bool {
 }
 
 // newSecretCache creates the cache for workload secrets and/or gateway secrets.
+//
+// 在初始化SecretCache的过程中，首先会根据sds服务的两种模式（默认Workload，选装IngressGateway）
+// 实例化不同的SecretFetcher，这里的SecretFetcher相当于sds的客户端，可以从不同的目标secret中获取到对应的证书内容；
+// 之后基于SecretFetcher封装一个secretCache实例，用于在memory中以sync.map的形式缓存不同应用或ingressgateway的证书内容，
+// 同时还存储了根证书，证书变更需要触发的回调函数和一些证书相关变更的计数统计等信息。
 func (sa *SDSAgent) newSecretCache(serverOptions sds.Options) (workloadSecretCache *cache.SecretCache, caClient caClientInterface.Client) {
+	// 通过监视k8s的secrets或者发送csr请求到CA
 	fetcher := &secretfetcher.SecretFetcher{}
 
 	// TODO: get the MC public keys from pilot.
@@ -355,6 +362,7 @@ func (sa *SDSAgent) newSecretCache(serverOptions sds.Options) (workloadSecretCac
 
 	workloadSdsCacheOptions.Plugins = sds.NewPlugins(serverOptions.PluginNames)
 	workloadSdsCacheOptions.OutputKeyCertToDir = serverOptions.OutputKeyCertToDir
+	// 监视证书的变更，并添加响应的回调函数
 	workloadSecretCache = cache.NewSecretCache(fetcher, sds.NotifyProxy, workloadSdsCacheOptions)
 	sa.WorkloadSecrets = workloadSecretCache
 
@@ -391,6 +399,7 @@ func (sa *SDSAgent) newSecretCache(serverOptions sds.Options) (workloadSecretCac
 			log.Info("Istio Agent uses default istiod CA")
 			serverOptions.CAEndpoint = "istiod.istio-system.svc:15012"
 
+			// 根据PilotCertProvider来推断rootCert(CA)
 			if serverOptions.PilotCertProvider == "istiod" {
 				log.Info("istiod uses self-issued certificate")
 				if rootCert, err = ioutil.ReadFile(path.Join(CitadelCACertPath, constants.CACertNamespaceConfigMapDataName)); err != nil {
@@ -421,6 +430,7 @@ func (sa *SDSAgent) newSecretCache(serverOptions sds.Options) (workloadSecretCac
 			}
 		} else {
 			// Explicitly configured CA
+			// 15010 ip secure或者调试模式
 			log.Infoa("Using user-configured CA ", serverOptions.CAEndpoint)
 			if strings.HasSuffix(serverOptions.CAEndpoint, ":15010") {
 				log.Warna("Debug mode or IP-secure network")

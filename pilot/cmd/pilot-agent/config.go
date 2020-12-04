@@ -40,6 +40,9 @@ import (
 // This is used for static configuration in the bootstrap that needs certificates, currently this is
 // Envoy Metrics Service and ALS. In the future this could expand to others like tracing, which currently
 // are using other mechanisms to configure certs.
+// 获取所有基于文件的tls证书
+// 当前只适用于Envoy度量服务或者ALS
+// 后续将会扩展到其他服务比如追踪(目前通过其他的机制来配置证书)等。
 func getTLSCerts(pc meshconfig.ProxyConfig) []string {
 	certs := []string{}
 	appendTLSCerts := func(rs *meshconfig.RemoteService) {
@@ -119,6 +122,8 @@ func constructProxyConfig() (meshconfig.ProxyConfig, error) {
 //
 // Merging is done by replacement. Any fields present in the overlay will replace those existing fields, while
 // untouched fields will remain untouched. This means lists will be replaced, not appended to, for example.
+// 这里讨论了meshConfig的优先级，默认->configmap->环境变量(来自sidecar的注入)->注解(来自download API)
+// meshConfig配置为覆盖方式
 func getMeshConfig(fileOverride, annotationOverride string) (meshconfig.MeshConfig, error) {
 	mc := mesh.DefaultMeshConfig()
 
@@ -168,6 +173,7 @@ func readPodAnnotations() (map[string]string, error) {
 }
 
 // Apply any overrides to proxy config from annotations
+// 覆盖config里的注解信息
 func applyAnnotations(config meshconfig.ProxyConfig, annos map[string]string) meshconfig.ProxyConfig {
 	if v, f := annos[annotation.SidecarDiscoveryAddress.Name]; f {
 		config.DiscoveryAddress = v
@@ -191,6 +197,11 @@ func getPilotSan(discoveryAddress string) string {
 	return discHost
 }
 
+// 看来目前仅支持只kubernetes
+// 如果服务注册源是kubernetes:
+//   做kubernetes发现地址的切割获取控制平面命名空间
+// 其他：
+//   返回空字符串
 func getControlPlaneNamespace(podNamespace string, discoveryAddress string) string {
 	ns := ""
 	if registryID == serviceregistry.Kubernetes {

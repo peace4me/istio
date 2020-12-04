@@ -332,6 +332,7 @@ func (sc *SecretCache) addFileWatcher(file string, token string, connKey ConnKey
 	// TODO(ramaraochavali): add integration test for file watcher functionality.
 	// Check if this file is being already watched, if so ignore it. FileWatcher has the functionality of
 	// checking for duplicates. This check is needed here to avoid processing duplicate events for the same file.
+	// 通过状态检查文件是否已经正在被监视中，避免对同一文件处理重复事件
 	sc.certMutex.Lock()
 	npath := filepath.Clean(file)
 	watching := false
@@ -581,6 +582,7 @@ func (sc *SecretCache) rotate(updateRootFlag bool) {
 
 	var secretMap sync.Map
 	wg := sync.WaitGroup{}
+	// EnvoyInstanceID->SecretItem
 	sc.secrets.Range(func(k interface{}, v interface{}) bool {
 		connKey := k.(ConnKey)
 		secret := v.(model.SecretItem)

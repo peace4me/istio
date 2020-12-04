@@ -248,6 +248,8 @@ func extractCACert(scrt *v1.Secret, fromCompoundSecret bool) (caCert []byte, exi
 // Otherwise the Secret can hold a server cert/key pair in `tls.crt`/`tls.key`,
 // or a server cert/key pair in `cert`/`key` and an optional client CA cert in
 // `-cacert`. A Secret with server cert/key and client CA cert is considered as a compound secret.
+// todo ①A CA k8s only secret(client CA)代表什么含义
+// ②服务端证书/密钥+客户端CA证书 = 复合(compound)证书代表什么
 func extractK8sSecretIntoSecretItem(scrt *v1.Secret, t time.Time) (serverItem, clientCAItem *model.SecretItem, isCAOnlySecret bool) {
 	resourceName := scrt.GetName()
 	isCAOnlySecret = strings.HasSuffix(resourceName, IngressGatewaySdsCaSuffix)
